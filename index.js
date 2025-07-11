@@ -148,7 +148,7 @@ export function parse(data) {
         parts[key] = value.length === 1 ? value[0] : value;
     }
 
-    let parsed = parser.parse(data);
+    let parsed = parser.parse(data.join("\n"));
 
     return new Parser(parts, parsed);
 }
