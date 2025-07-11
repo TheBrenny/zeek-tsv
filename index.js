@@ -131,7 +131,7 @@ export function parse(data) {
     let parts = {};
 
     while(data[0].startsWith("#") || data[0] === "") {
-        let comment = data.splice(i, 1)[0];
+        let comment = data.splice(0, 1)[0];
         if(comment === "") continue;
 
         let [key, value] = comment.split("\t", 2);
@@ -140,7 +140,7 @@ export function parse(data) {
     }
 
     while(data[data.length - 1].startsWith("#") || data[data.length - 1] === "") {
-        let comment = data.splice(i, 1)[0];
+        let comment = data.splice(data.length - 1, 1)[0];
         if(comment === "") continue;
 
         let [key, value] = comment.split("\t", 2);
