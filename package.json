@@ -1,6 +1,6 @@
 {
     "name": "zeek-tsv",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "parse zeek tsv files",
     "main": "index.js",
     "scripts": {
