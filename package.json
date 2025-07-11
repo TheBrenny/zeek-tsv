@@ -1,0 +1,16 @@
+{
+    "name": "zeek-tsv",
+    "version": "0.1.0",
+    "description": "parse zeek tsv files",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no tests specified. Maybe you could make one?\""
+    },
+    "keywords": [],
+    "author": "TheBrenny <iam@justbrenny.me>",
+    "license": "MIT",
+    "type": "module",
+    "dependencies": {
+        "tsv": "^0.2.0"
+    }
+}
