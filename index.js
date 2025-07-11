@@ -28,7 +28,7 @@ class Parser {
     #data;
     #parsedMemoize;
 
-    constructor({separator, setSeparator, emptyField, unsetField, path, fields, types, open, close}, data) {
+    constructor({separator, setSeparator, emptyField, unsetField, path, fields, types, open, close}, parsed) {
         this.#separator = separator;
         this.#setSeparator = setSeparator;
         this.#emptyField = emptyField;
@@ -37,19 +37,19 @@ class Parser {
         this.#fields = fields;
         this.#types = types;
 
-        if(open === null) this.#open = null;
+        if(open === null || open === undefined) this.#open = null;
         else {
             let reExec = dateRegex.exec(open);
             this.#open = new Date(reExec.groups.year, reExec.groups.month - 1, reExec.groups.day, reExec.groups.hour, reExec.groups.minute, reExec.groups.second);
         }
-        if(close === null) this.#close = null;
+        if(close === null || close === undefined) this.#close = null;
         else {
             let reExec = dateRegex.exec(close);
             this.#close = new Date(reExec.groups.year, reExec.groups.month - 1, reExec.groups.day, reExec.groups.hour, reExec.groups.minute, reExec.groups.second);
         }
 
-        this.#data = data;
-        this.#parsedMemoize = new Array(data.length).fill(null).map(() => new Array(this.#fields.length).fill(undefined));
+        this.#data = parsed;
+        this.#parsedMemoize = new Array(parsed.length).fill(null).map(() => new Array(this.#fields.length).fill(undefined));
     }
 
     get separator() {return this.#separator;}
@@ -134,20 +134,18 @@ export function parse(data) {
         let comment = data.splice(0, 1)[0];
         if(comment === "") continue;
 
-        let [key, value] = comment.split(/[\t ]/, 2);
-        value = value.split("\t");
-        parts[key] = value.length === 1 ? value[0] : value;
+        let [key, ...values] = comment.split(/[\t ]/);
+        parts[key.substring(1)] = values.length === 1 ? values[0] : values;
     }
 
     while(data[data.length - 1].startsWith("#") || data[data.length - 1] === "") {
         let comment = data.splice(data.length - 1, 1)[0];
         if(comment === "") continue;
 
-        let [key, value] = comment.split(/[\t ]/, 2);
-        value = value.split("\t");
-        parts[key] = value.length === 1 ? value[0] : value;
+        let [key, ...values] = comment.split(/[\t ]/);
+        parts[key.substring(1)] = values.length === 1 ? values[0] : values;
     }
-
+    
     let parsed = parser.parse(data.join("\n"));
 
     return new Parser(parts, parsed);
