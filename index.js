@@ -134,7 +134,7 @@ export function parse(data) {
         let comment = data.splice(0, 1)[0];
         if(comment === "") continue;
 
-        let [key, value] = comment.split("\t", 2);
+        let [key, value] = comment.split(/[\t ]/, 2);
         value = value.split("\t");
         parts[key] = value.length === 1 ? value[0] : value;
     }
@@ -143,7 +143,7 @@ export function parse(data) {
         let comment = data.splice(data.length - 1, 1)[0];
         if(comment === "") continue;
 
-        let [key, value] = comment.split("\t", 2);
+        let [key, value] = comment.split(/[\t ]/, 2);
         value = value.split("\t");
         parts[key] = value.length === 1 ? value[0] : value;
     }
