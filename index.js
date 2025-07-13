@@ -25,10 +25,13 @@ class Parser {
     #open;
     #close;
 
+    #rest = {};
+    
     #data;
     #parsedMemoize;
+    #headersMem;
 
-    constructor({separator, setSeparator, emptyField, unsetField, path, fields, types, open, close}, parsed) {
+    constructor({separator, setSeparator, emptyField, unsetField, path, fields, types, open, close, ...rest}, parsed) {
         this.#separator = separator;
         this.#setSeparator = setSeparator;
         this.#emptyField = emptyField;
@@ -36,6 +39,8 @@ class Parser {
         this.#path = path;
         this.#fields = fields;
         this.#types = types;
+
+        for(let r in rest) this.#rest[r] = rest[r];
 
         if(open === null || open === undefined) this.#open = null;
         else {
@@ -60,6 +65,21 @@ class Parser {
     get fields() {return [...this.#fields];}
     get open() {return this.#open;}
     get close() {return this.#close;}
+    get allHeaders() {
+        if(this.#headersMem) return this.#headersMem;
+        this.#headersMem = [
+            "separator",
+            "setSeparator",
+            "emptyField",
+            "unsetField",
+            "path",
+            "fields",
+            "open",
+            "close",
+            ...Object.keys(this.#rest)
+        ];
+        return this.#headersMem;
+    }
 
     all() {
         return this.row(0, this.#data.length);
@@ -90,6 +110,11 @@ class Parser {
 
     stringify() {
         let data = [...this.#data];
+        for(let r in this.#rest) {
+            let v = this.#rest[r];
+            if(Array.isArray(v)) v = v.join("\t");
+            data.unshift(`#${r}\t${v}`);
+        }
         data.unshift(
             `#separator\t\\x${this.#separator.charCodeAt(0).toString(16).padStart(2, "0")}`,
             `#setseparator\t${this.#setSeparator}`,
@@ -145,7 +170,7 @@ export function parse(data) {
         let [key, ...values] = comment.split(/[\t ]/);
         parts[key.substring(1)] = values.length === 1 ? values[0] : values;
     }
-    
+
     let parsed = parser.parse(data.join("\n"));
 
     return new Parser(parts, parsed);
