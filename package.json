@@ -6,11 +6,11 @@
     "scripts": {
         "test": "echo \"Error: no tests specified. Maybe you could make one?\""
     },
+    "bin": {
+        "zeek-tsv": "./bin.js"
+    },
     "keywords": [],
     "author": "TheBrenny <iam@justbrenny.me>",
     "license": "MIT",
-    "type": "module",
-    "dependencies": {
-        "tsv": "^0.2.0"
-    }
+    "type": "module"
 }

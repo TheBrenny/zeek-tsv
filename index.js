@@ -1,20 +1,4 @@
-import TSV from "tsv";
-
-const parser = new TSV.Parser("\t", {header: false});
-
-const dateRegex = /(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})-(?<hour>\d{2})-(?<minute>\d{2})-(?<second>\d{2})/
-/** @type {(d: Date) => string} */
-const toDateString = (d) => {
-    let year = d.getFullYear() + "";
-    let month = ((d.getMonth() + 1) + "").padStart(2, "0");
-    let day = (d.getDate() + "").padStart(2, "0");
-    let hour = (d.getHours() + "").padStart(2, "0");
-    let minute = (d.getMinutes() + "").padStart(2, "0");
-    let second = (d.getSeconds() + "").padStart(2, "0");
-    return `${year}-${month}-${day}-${hour}-${minute}-${second}`
-};
-
-class Parser {
+class ZeekLog {
     #separator;
     #setSeparator;
     #emptyField;
@@ -26,10 +10,9 @@ class Parser {
     #close;
 
     #rest = {};
-    
-    #data;
-    #parsedMemoize;
+
     #headersMem;
+    #data;
 
     constructor({separator, setSeparator, emptyField, unsetField, path, fields, types, open, close, ...rest}, parsed) {
         this.#separator = separator;
@@ -43,18 +26,11 @@ class Parser {
         for(let r in rest) this.#rest[r] = rest[r];
 
         if(open === null || open === undefined) this.#open = null;
-        else {
-            let reExec = dateRegex.exec(open);
-            this.#open = new Date(reExec.groups.year, reExec.groups.month - 1, reExec.groups.day, reExec.groups.hour, reExec.groups.minute, reExec.groups.second);
-        }
+        else this.#open = fromDateString(open);
         if(close === null || close === undefined) this.#close = null;
-        else {
-            let reExec = dateRegex.exec(close);
-            this.#close = new Date(reExec.groups.year, reExec.groups.month - 1, reExec.groups.day, reExec.groups.hour, reExec.groups.minute, reExec.groups.second);
-        }
+        else this.#close = fromDateString(close);
 
         this.#data = parsed;
-        this.#parsedMemoize = new Array(parsed.length).fill(null).map(() => new Array(this.#fields.length).fill(undefined));
     }
 
     get separator() {return this.#separator;}
@@ -81,35 +57,12 @@ class Parser {
         return this.#headersMem;
     }
 
-    all() {
-        return this.row(0, this.#data.length);
-    }
-
-    row(start, stop) {
-        let data = [];
-        for(let r = start; r < stop; r++) {
-            let row = {};
-            for(let field of this.#fields) row[field] = this.get(r, field);
-            data.push(row);
-        }
-        return data;
-    }
-
-    get(row, field) {
-        let col = this.fields.indexOf(field);
-        if(col === -1) throw new Error("Unknown field" + field);
-
-        if(this.#parsedMemoize[row]?.[col] !== undefined) return this.#parsedMemoize[row][col];
-
-        let dataPoint = this.#data[row][col];
-        if(dataPoint === this.emptyField) return null;
-        if(dataPoint === this.unsetField) return undefined;
-
-        return transform(dataPoint, this.#types[col]);
+    get data() {
+        return [...this.#data];
     }
 
     stringify() {
-        let data = [...this.#data];
+        let data = this.#data.map((r) => Object.entries(r).map(([k, v], i) => transformToType(v, this.#types[i])).join(this.#separator));
         for(let r in this.#rest) {
             let v = this.#rest[r];
             if(Array.isArray(v)) v = v.join("\t");
@@ -130,7 +83,69 @@ class Parser {
     }
 }
 
-function transform(data, type) {
+/**
+ * Parses the zeek log into a flat json object
+ * @param {string} data 
+ */
+export function parse(data) {
+    data = data.split("\n");
+
+    let parts = {};
+    let sep = " ";
+
+    while(data[0].startsWith("#") || data[0] === "") {
+        let comment = data.splice(0, 1)[0];
+        if(comment === "") continue;
+        comment = comment.substring(1);
+
+        let [key, ...values] = comment.split(sep);
+        if(key === "separator") {
+            sep = values[0].substring(2);
+            sep = String.fromCharCode(parseInt(sep, 16));
+            values = [sep];
+        }
+        parts[key] = values.length === 1 ? values[0] : values;
+    }
+
+    while(data[data.length - 1].startsWith("#") || data[data.length - 1] === "") {
+        let comment = data.splice(data.length - 1, 1)[0];
+        if(comment === "") continue;
+        comment = comment.substring(1);
+
+        let [key, ...values] = comment.split(/[\t ]/);
+        parts[key] = values.length === 1 ? values[0] : values;
+    }
+
+
+    let parsed = [];
+    for(let row of data) {
+        // split on \t, then map to [k,v], all wrapped in a an Object maker, then freeze it so it can't change
+        let values = Object.freeze(Object.fromEntries(row.split(parts.separator).map((v, i) => [parts.fields[i], transformFromType(v, parts.types[i])])));
+        parsed.push(values);
+    }
+    parsed = Object.freeze(parsed);
+
+    return new ZeekLog(parts, parsed);
+}
+
+const dateRegex = /(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})-(?<hour>\d{2})-(?<minute>\d{2})-(?<second>\d{2})/
+/** @type {(d: Date) => string} */
+const toDateString = (d) => {
+    let year = d.getFullYear() + "";
+    let month = ((d.getMonth() + 1) + "").padStart(2, "0");
+    let day = (d.getDate() + "").padStart(2, "0");
+    let hour = (d.getHours() + "").padStart(2, "0");
+    let minute = (d.getMinutes() + "").padStart(2, "0");
+    let second = (d.getSeconds() + "").padStart(2, "0");
+    return `${year}-${month}-${day}-${hour}-${minute}-${second}`
+};
+/** @type {(d: string) => Date} */
+const fromDateString = (d) => {
+    let reExec = dateRegex.exec(d);
+    return new Date(reExec.groups.year, reExec.groups.month - 1, reExec.groups.day, reExec.groups.hour, reExec.groups.minute, reExec.groups.second);
+}
+
+function transformFromType(data, type) {
     switch(type) {
         case "string": return data;
         case "date": return new Date(parseInt(data) * 1000);
@@ -145,33 +160,18 @@ function transform(data, type) {
             return data;
     }
 }
-
-/**
- * Parses the zeek log into a flat json object
- * @param {string} data 
- */
-export function parse(data) {
-    data = data.split("\n");
-
-    let parts = {};
-
-    while(data[0].startsWith("#") || data[0] === "") {
-        let comment = data.splice(0, 1)[0];
-        if(comment === "") continue;
-
-        let [key, ...values] = comment.split(/[\t ]/);
-        parts[key.substring(1)] = values.length === 1 ? values[0] : values;
+function transformToType(data, type) {
+    switch(type) {
+        case "string": return data;
+        case "date": return data.getTime() / 1000;
+        case "addr": return data;
+        case "port": return data;
+        case "enum": return data;
+        case "interval": return data;
+        case "count": return data.toFixed(0);
+        case "bool": return data ? "T" : "F";
+        case "int": return data.toFixed(0);
+        default:
+            return data;
     }
-
-    while(data[data.length - 1].startsWith("#") || data[data.length - 1] === "") {
-        let comment = data.splice(data.length - 1, 1)[0];
-        if(comment === "") continue;
-
-        let [key, ...values] = comment.split(/[\t ]/);
-        parts[key.substring(1)] = values.length === 1 ? values[0] : values;
-    }
-
-    let parsed = parser.parse(data.join("\n"));
-
-    return new Parser(parts, parsed);
 }
