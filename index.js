@@ -1,3 +1,5 @@
+import {Transform} from "stream";
+
 class ZeekLog {
     #separator;
     #setSeparator;
@@ -87,7 +89,7 @@ class ZeekLog {
  * Parses the zeek log into a flat json object
  * @param {string} data 
  */
-export function parse(data) {
+export function parseZeek(data) {
     data = data.split("\n");
 
     let parts = {};
@@ -112,10 +114,9 @@ export function parse(data) {
         if(comment === "") continue;
         comment = comment.substring(1);
 
-        let [key, ...values] = comment.split(/[\t ]/);
+        let [key, ...values] = comment.split(sep);
         parts[key] = values.length === 1 ? values[0] : values;
     }
-
 
     let parsed = [];
     for(let row of data) {
@@ -127,6 +128,37 @@ export function parse(data) {
 
     return new ZeekLog(parts, parsed);
 }
+
+/**
+ * Expects lines as chunks
+ */
+export const streamZeek = new Transform({
+    construct() {
+        this.#parts = {};
+        this.#sep = " "
+    },
+    transform(line, encoding, cb) {
+        if(line === "") return;
+
+        if(line.startsWith("#")) {
+            let [key, ...values] = comment.split(this.#sep);
+            if(key === "separator") {
+                this.#sep = values[0].substring(2);
+                this.#sep = String.fromCharCode(parseInt(this.#sep, 16));
+                values = [this.#sep];
+            }
+            this.#parts[key] = values.length === 1 ? values[0] : values;
+        } else {
+            let values = Object.fromEntries(line.split(this.#sep).map((v, i) => [this.#parts.fields[i], transformFromType(v, this.#parts.types[i])]));
+            this.push(values);
+        }
+        cb();
+    },
+    flush(cb) {
+        this.push(this.#parts);
+        cb();
+    }
+});
 
 const dateRegex = /(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})-(?<hour>\d{2})-(?<minute>\d{2})-(?<second>\d{2})/
 /** @type {(d: Date) => string} */
