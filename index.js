@@ -1,5 +1,4 @@
 import {Readable, Transform} from "stream";
-import {ReadableStream} from "stream/web";
 
 class ZeekLog {
     #separator;
@@ -209,25 +208,22 @@ streamZeek.web = () => {
 
 /**
  * Takes a stream (the output of `streamZeek`) and collates it into a ZeekLog.
- * @param {Readable|ReadableStream} stream
+ * @param {Readable} stream
  * @returns {Promise<ZeekLog>}
  */
 streamZeek.collect = (stream) => {
     return new Promise((resolve, reject) => {
-        if(stream instanceof ReadableStream) stream = Readable.fromWeb(stream);
-        if(stream instanceof Readable) {
-            let arr = [];
-            stream.on("data", (chunk) => {
-                arr.push(Object.freeze(chunk));
-            });
-            stream.on("end", () => {
-                let parts = arr.splice(arr.length - 1, 1)[0];
-                resolve(new ZeekLog(parts, Object.freeze(arr)));
-            });
-            stream.on("error", (err) => {
-                reject(err);
-            })
-        } else reject(new Error("incoming stream wasn't readable"));
+        let arr = [];
+        stream.on("data", (chunk) => {
+            arr.push(Object.freeze(chunk));
+        });
+        stream.on("end", () => {
+            let parts = arr.splice(arr.length - 1, 1)[0];
+            resolve(new ZeekLog(parts, Object.freeze(arr)));
+        });
+        stream.on("error", (err) => {
+            reject(err);
+        })
     });
 }
 
