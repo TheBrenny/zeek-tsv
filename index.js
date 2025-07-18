@@ -1,4 +1,4 @@
-import {Transform} from "stream";
+import {Readable, Transform} from "stream";
 
 class ZeekLog {
     #separator;
@@ -84,10 +84,40 @@ class ZeekLog {
         return data.join("\n")
     }
 }
+class ZeekStreamer {
+    #parts = {};
+    #sep = " ";
+    constructor() {
+        this.#parts = {};
+        this.#sep = " ";
+    }
+
+    transform(line) {
+        if(line === "") return;
+
+        if(line.startsWith("#")) {
+            let [key, ...values] = comment.split(this.#sep);
+            if(key === "separator") {
+                this.#sep = values[0].substring(2);
+                this.#sep = String.fromCharCode(parseInt(this.#sep, 16));
+                values = [this.#sep];
+            }
+            this.#parts[key] = values.length === 1 ? values[0] : values;
+        } else {
+            let values = Object.fromEntries(line.split(this.#sep).map((v, i) => [this.#parts.fields[i], transformFromType(v, this.#parts.types[i])]));
+            return values;
+        }
+    }
+
+    flush() {
+        return this.#parts;
+    }
+}
 
 /**
  * Parses the zeek log into a flat json object
  * @param {string} data 
+ * @returns {ZeekLog}
  */
 export function parseZeek(data) {
     data = data.split("\n");
@@ -130,35 +160,64 @@ export function parseZeek(data) {
 }
 
 /**
- * Expects lines as chunks
+ * Transforms lines of TSV data into JSON lines
+ * @returns {Transform}
  */
-export const streamZeek = new Transform({
-    construct() {
-        this.#parts = {};
-        this.#sep = " "
+export const streamZeek = () => new Transform({
+    construct(cb) {
+        this.#zeekStreamer = new ZeekStreamer();
+        cb();
     },
     transform(line, encoding, cb) {
-        if(line === "") return;
-
-        if(line.startsWith("#")) {
-            let [key, ...values] = comment.split(this.#sep);
-            if(key === "separator") {
-                this.#sep = values[0].substring(2);
-                this.#sep = String.fromCharCode(parseInt(this.#sep, 16));
-                values = [this.#sep];
-            }
-            this.#parts[key] = values.length === 1 ? values[0] : values;
-        } else {
-            let values = Object.fromEntries(line.split(this.#sep).map((v, i) => [this.#parts.fields[i], transformFromType(v, this.#parts.types[i])]));
-            this.push(values);
-        }
+        let data = this.#zeekStreamer.transform();
+        if(data !== undefined) this.push(data);
         cb();
     },
     flush(cb) {
-        this.push(this.#parts);
+        let data = this.#zeekStreamer.flush();
+        if(data !== undefined) this.push(data);
         cb();
     }
 });
+
+streamZeek.web = () => new TransformStream({
+    start(controller) {
+        this.#zeekStreamer = new ZeekStreamer();
+    },
+    transform(chunk, controller) {
+        let data = this.#zeekStreamer.transform();
+        if(data !== undefined) controller.enqueue(data);
+    },
+    flush(controller) {
+        let data = this.#zeekStreamer.flush();
+        if(data !== undefined) controller.enqueue(data);
+    }
+})
+
+/**
+ * Takes a stream (the output of `streamZeek`) and collates it into a ZeekLog.
+ * @param {Readable|ReadableStream} stream
+ * @returns {ZeekLog}
+ */
+export function collectZeekStream(stream) {
+    return new Promise((resolve, reject) => {
+        if(stream instanceof ReadableStream) stream = Readable.fromWeb(stream);
+        if(stream instanceof Readable) {
+            let arr = [];
+            stream.on("data", (chunk) => {
+                arr.push(Object.freeze(chunk));
+            });
+            stream.on("end", () => {
+                let parts = arr.splice(arr.length - 1, 1)[0];
+                arr = Object.freeze(arr);
+                resolve(new ZeekLog(parts, arr));
+            });
+            stream.on("error", (err) => {
+                reject(err);
+            })
+        } else reject(new Error("incoming stream wasn't readable"));
+    });
+}
 
 const dateRegex = /(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})-(?<hour>\d{2})-(?<minute>\d{2})-(?<second>\d{2})/
 /** @type {(d: Date) => string} */
