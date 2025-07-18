@@ -101,6 +101,7 @@ class ZeekStreamer {
 
         if(line.startsWith("#")) {
             let [key, ...values] = line.split(this.#sep);
+            key = key.substring(1);
             if(key === "separator") {
                 this.#sep = values[0].substring(2);
                 this.#sep = String.fromCharCode(parseInt(this.#sep, 16));
@@ -115,7 +116,7 @@ class ZeekStreamer {
     }
 
     flush() {
-        return this.#parts;
+        return {"#metadata": this.#parts};
     }
 }
 
